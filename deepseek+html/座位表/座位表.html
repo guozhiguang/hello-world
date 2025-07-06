@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>智能座位管理系统</title>
+    <!-- 新增截图库 -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <!-- 新增Excel处理库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #90EE90, #98FB98);
+            font-family: '微软雅黑', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #2E8B57;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            font-size: 2.5em;
+            margin: 20px 0;
+        }
+
+        #lectern {
+            width: 300px;
+            height: 60px;
+            margin: 20px auto;
+            background: #F0FFF0;
+            border: 3px solid #228B22;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #228B22;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        table {
+            border-collapse: collapse;
+            margin: 20px auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        td {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #228B22;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .aisle {
+            background: #E0FFFF !important;
+            font-size: 28px !important;
+            color: #006400 !important;
+            writing-mode: vertical-rl;
+            letter-spacing: 8px;
+            font-weight: bold;
+            cursor: not-allowed;
+        }
+
+        .seat {
+            background: #F8F8FF;
+            cursor: move;
+            position: relative;
+        }
+
+        .seat:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .seat::after {
+            content: "↔";
+            position: absolute;
+            right: 5px;
+            bottom: 2px;
+            color: #228B22;
+            opacity: 0.3;
+        }
+
+        #controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        button {
+            background: #228B22;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+            margin: 0 10px;
+        }
+
+        button:hover {
+            background: #3CB371;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-upload {
+            background: #228B22;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        .export-btn {
+            background: #2E8B57 !important;
+            margin-left: 15px !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>初三（六）班座位表</h1>
+    <div id="lectern">🏫 讲 台 🏫</div>
+    <table id="seatingChart"></table>
+
+    <div id="controls">
+        <label class="file-upload">
+            📁 导入名单
+            <input type="file" id="fileInput" accept=".txt,.csv,.xlsx">
+        </label>
+        <button onclick="randomizeSeats()">🎲 随机换座</button>
+        <button class="export-btn" onclick="exportToImage()">📸 导出图片</button>
+        <button class="export-btn" onclick="exportToExcel()">📊 导出Excel</button>
+    </div>
+
+    <script>
+        let seats = [];
+        const ROWS = 8;
+        const COLS = 8;
+        const AISLE_COLUMNS = new Set([2, 5]);
+
+        // 初始化座位数据
+        function init() {
+            seats = Array.from({ length: ROWS }, (_, row) => 
+                Array.from({ length: COLS }, (_, col) => ({
+                    isAisle: AISLE_COLUMNS.has(col),
+                    name: AISLE_COLUMNS.has(col) ? '过道' : `学生${row * 6 + col + 1}`,
+                    row,
+                    col
+                }))
+            );
+            loadSavedData();
+            render();
+        }
+
+        // 导出为图片功能
+        function exportToImage() {
+            html2canvas(document.querySelector("#seatingChart"), {
+                scale: 2,
+                backgroundColor: null
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = '座位表.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+
+        // 导出为Excel功能
+        function exportToExcel() {
+            // 创建二维数组数据结构
+            const data = [];
+            seats.forEach((row, rowIndex) => {
+                const rowData = [];
+                row.forEach((cell, colIndex) => {
+                    rowData.push(cell.isAisle ? "过道" : cell.name);
+                });
+                data.push(rowData);
+            });
+
+            // 创建工作簿
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "座位表");
+
+            // 生成文件
+            XLSX.writeFile(wb, '座位表.xlsx');
+        }
+
+        // 渲染座位表
+        function render() {
+            const table = document.getElementById('seatingChart');
+            table.innerHTML = '';
+            
+            seats.forEach(rowData => {
+                const tr = document.createElement('tr');
+                rowData.forEach(cell => {
+                    const td = document.createElement('td');
+                    td.className = cell.isAisle ? 'aisle' : 'seat';
+                    td.textContent = cell.name;
+                    td.draggable = !cell.isAisle;
+                    
+                    if (!cell.isAisle) {
+                        td.dataset.row = cell.row;
+                        td.dataset.col = cell.col;
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                table.appendChild(tr);
+            });
+            
+            addDragListeners();
+        }
+
+        // 拖拽功能实现
+        let dragElement = null;
+
+        function addDragListeners() {
+            document.querySelectorAll('.seat').forEach(seat => {
+                seat.addEventListener('dragstart', handleDragStart);
+                seat.addEventListener('dragover', handleDragOver);
+                seat.addEventListener('drop', handleDrop);
+            });
+        }
+
+        function handleDragStart(e) {
+            dragElement = this;
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (this === dragElement) return;
+            
+            // 交换座位数据
+            const tempName = this.textContent;
+            this.textContent = dragElement.textContent;
+            dragElement.textContent = tempName;
+            
+            // 更新数据模型
+            const [row1, col1] = [dragElement.dataset.row, dragElement.dataset.col];
+            const [row2, col2] = [this.dataset.row, this.dataset.col];
+            
+            [seats[row1][col1].name, seats[row2][col2].name] = 
+            [seats[row2][col2].name, seats[row1][col1].name];
+            
+            saveData();
+        }
+
+        // 随机换座功能
+        function randomizeSeats() {
+            const names = [];
+            
+            // 收集所有可用的座位姓名
+            seats.forEach(row => row.forEach(cell => {
+                if (!cell.isAisle) names.push(cell.name);
+            }));
+            
+            // Fisher-Yates洗牌算法
+            for (let i = names.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [names[i], names[j]] = [names[j], names[i]];
+            }
+            
+            // 重新分配姓名
+            let index = 0;
+            seats = seats.map(row => 
+                row.map(cell => {
+                    if (cell.isAisle) return cell;
+                    return { ...cell, name: names[index++] };
+                })
+            );
+            
+            render();
+            saveData();
+        }
+
+        // 文件导入功能
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const names = text.split(/[\r\n,;]+/).filter(n => n.trim());
+                
+                if (names.length < 48) {
+                    alert('需要至少48个姓名');
+                    return;
+                }
+                
+                let index = 0;
+                seats = seats.map(row => 
+                    row.map(cell => {
+                        if (cell.isAisle) return cell;
+                        return { ...cell, name: names[index++] };
+                    })
+                );
+                
+                render();
+                saveData();
+            };
+            
+            reader.readAsText(file);
+        });
+
+        // 数据存储与加载
+        function saveData() {
+            const data = seats.flat()
+                .filter(cell => !cell.isAisle)
+                .map(cell => cell.name);
+            localStorage.setItem('seatData', JSON.stringify(data));
+        }
+
+        function loadSavedData() {
+            const saved = JSON.parse(localStorage.getItem('seatData'));
+            if (!saved) return;
+
+            let index = 0;
+            seats = seats.map(row => 
+                row.map(cell => {
+                    if (cell.isAisle) return cell;
+                    return { ...cell, name: saved[index++] };
+                })
+            );
+        }
+
+        // 初始化程序
+        init();
+    </script>
+</body>
+</html>
